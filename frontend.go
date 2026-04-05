@@ -1,0 +1,617 @@
+package main
+
+import "net/http"
+
+func serveFrontend(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(indexHTML))
+}
+
+const indexHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MC Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Oxanium:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --green:   #39ff6e;
+    --green2:  #00c44f;
+    --green-dim: #1a5c35;
+    --amber:   #ffbe3a;
+    --red:     #ff4a4a;
+    --bg:      #050e09;
+    --bg2:     #090f0c;
+    --panel:   #0b1610;
+    --border:  #152e1e;
+    --text:    #c8f5d8;
+    --muted:   #3d6b4f;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui:   'Oxanium', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    overflow-x: hidden;
+  }
+
+  /* CRT scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* Glow noise overlay */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.4;
+    z-index: 998;
+  }
+
+  /* ── Layout ── */
+  .shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+    display: grid;
+    gap: 18px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: var(--font-ui);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--green);
+    text-shadow: 0 0 16px var(--green2);
+    letter-spacing: 0.05em;
+  }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .header-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  #clock { color: var(--green2); }
+
+  /* ── Card ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 20px;
+    position: relative;
+  }
+  .card::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -10px; left: 14px;
+    background: var(--panel);
+    padding: 0 6px;
+    font-size: 0.65rem;
+    font-family: var(--font-ui);
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* ── Status row ── */
+  .status-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 20px;
+  }
+  .indicator {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: none;
+    transition: background 0.4s, box-shadow 0.4s;
+    flex-shrink: 0;
+  }
+  .indicator.running {
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green), 0 0 24px var(--green2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .indicator.stopped  { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .indicator.loading  { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: pulse 1s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
+
+  .status-label {
+    font-family: var(--font-ui);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  #status-text { color: var(--green); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* ── Stat grid ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+  }
+  .stat {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 14px;
+  }
+  .stat-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-family: var(--font-ui);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 1.1rem;
+    color: var(--green);
+  }
+  .stat-value.dim { color: var(--muted); }
+
+  /* ── Progress bar ── */
+  .bar-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    height: 6px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green2), var(--green));
+    box-shadow: 0 0 6px var(--green2);
+    transition: width 0.6s ease;
+    width: 0%;
+  }
+  .bar-fill.warn { background: linear-gradient(90deg, #c47d00, var(--amber)); box-shadow: 0 0 6px var(--amber); }
+  .bar-fill.danger { background: linear-gradient(90deg, #8b0000, var(--red)); box-shadow: 0 0 6px var(--red); }
+
+  /* ── Buttons ── */
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 9px 22px;
+    border-radius: 3px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+  }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-start  { color: var(--green); border-color: var(--green2); }
+  .btn-start:hover:not(:disabled)  { background: var(--green2); color: var(--bg); box-shadow: 0 0 16px var(--green2); }
+  .btn-stop   { color: var(--red); border-color: var(--red); }
+  .btn-stop:hover:not(:disabled)   { background: var(--red); color: var(--bg); box-shadow: 0 0 16px var(--red); }
+  .btn-restart { color: var(--amber); border-color: var(--amber); }
+  .btn-restart:hover:not(:disabled) { background: var(--amber); color: var(--bg); box-shadow: 0 0 16px var(--amber); }
+
+  /* ── Toast notification ── */
+  #toast {
+    position: fixed;
+    bottom: 28px; right: 28px;
+    background: var(--panel);
+    border: 1px solid var(--green2);
+    border-radius: 4px;
+    padding: 10px 18px;
+    font-size: 0.8rem;
+    color: var(--green);
+    box-shadow: 0 0 20px rgba(0,196,79,0.25);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.error { border-color: var(--red); color: var(--red); box-shadow: 0 0 20px rgba(255,74,74,0.25); }
+
+  /* ── Console ── */
+  .console-wrap {
+    position: relative;
+  }
+  #console {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    height: 340px;
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-size: 0.78rem;
+    line-height: 1.65;
+    color: #7fc49a;
+    scroll-behavior: smooth;
+  }
+  #console::-webkit-scrollbar { width: 6px; }
+  #console::-webkit-scrollbar-track { background: var(--bg2); }
+  #console::-webkit-scrollbar-thumb { background: var(--green-dim); border-radius: 3px; }
+
+  .log-line { word-break: break-all; }
+  .log-line.warn  { color: var(--amber); }
+  .log-line.error { color: var(--red); }
+  .log-line.info  { color: var(--green2); }
+
+  .console-actions {
+    position: absolute;
+    top: 8px; right: 8px;
+    display: flex; gap: 6px;
+  }
+  .icon-btn {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .icon-btn:hover { color: var(--green); border-color: var(--green2); }
+
+  /* ── Command input ── */
+  .cmd-row {
+    display: flex;
+    gap: 0;
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .cmd-row:focus-within { border-color: var(--green2); box-shadow: 0 0 10px rgba(0,196,79,0.15); }
+  .cmd-prompt {
+    background: var(--bg2);
+    color: var(--green2);
+    padding: 0 14px;
+    display: flex; align-items: center;
+    font-size: 0.85rem;
+    border-right: 1px solid var(--border);
+    user-select: none;
+  }
+  #cmd-input {
+    background: var(--bg);
+    color: var(--green);
+    border: none;
+    outline: none;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    flex: 1;
+    caret-color: var(--green);
+  }
+  #cmd-input::placeholder { color: var(--muted); }
+  .btn-send {
+    background: var(--bg2);
+    color: var(--green2);
+    border: none;
+    border-left: 1px solid var(--border);
+    padding: 0 18px;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-send:hover { background: var(--green2); color: var(--bg); }
+
+  /* ── Animations ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .card { animation: fadeIn 0.4s ease both; }
+  .card:nth-child(2) { animation-delay: 0.05s; }
+  .card:nth-child(3) { animation-delay: 0.10s; }
+  .card:nth-child(4) { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">MC<span>/</span>PANEL</div>
+    <div class="header-time">
+      <span id="clock">--:--:--</span> &nbsp;|&nbsp; AUTO-REFRESH 5s
+    </div>
+  </header>
+
+  <!-- Status card -->
+  <div class="card" data-label="Server Status">
+    <div class="status-row">
+      <div class="indicator" id="indicator"></div>
+      <div class="status-label">
+        STATUS:&nbsp;<span id="status-text">LOADING</span>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted)" id="uptime-label"></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Container</div>
+        <div class="stat-value" id="stat-id">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Image</div>
+        <div class="stat-value" id="stat-image" style="font-size:0.85rem">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">CPU Usage</div>
+        <div class="stat-value" id="stat-cpu">—</div>
+        <div class="bar-wrap"><div class="bar-fill" id="bar-cpu"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Memory</div>
+        <div class="stat-value" id="stat-mem">—</div>
+        <div class="bar-wrap"><div class="bar-fill" id="bar-mem"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls card -->
+  <div class="card" data-label="Controls">
+    <div class="btn-row">
+      <button class="btn btn-start"   id="btn-start"   onclick="action('start')">▶ Start</button>
+      <button class="btn btn-stop"    id="btn-stop"    onclick="action('stop')">■ Stop</button>
+      <button class="btn btn-restart" id="btn-restart" onclick="action('restart')">↺ Restart</button>
+    </div>
+  </div>
+
+  <!-- Console card -->
+  <div class="card" data-label="Console">
+    <div class="console-wrap">
+      <div id="console"></div>
+      <div class="console-actions">
+        <button class="icon-btn" onclick="toggleAutoScroll()">AUTO-SCROLL: <span id="scroll-state">ON</span></button>
+        <button class="icon-btn" onclick="clearConsole()">CLEAR</button>
+      </div>
+    </div>
+    <div class="cmd-row">
+      <div class="cmd-prompt">&gt;_</div>
+      <input id="cmd-input" type="text" placeholder="say Hello, world!" autocomplete="off"
+             onkeydown="if(event.key==='Enter') sendCommand()" />
+      <button class="btn-send" onclick="sendCommand()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';  // same origin — empty means relative path
+
+// ── Clock ──────────────────────────────────────────────
+function tickClock() {
+  document.getElementById('clock').textContent =
+    new Date().toTimeString().slice(0, 8);
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ── Status polling ─────────────────────────────────────
+let lastStatus = null;
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(API + '/api/status');
+    const data = await res.json();
+    applyStatus(data);
+  } catch (e) {
+    setIndicator('error');
+    document.getElementById('status-text').textContent = 'UNREACHABLE';
+  }
+}
+
+function applyStatus(s) {
+  const ind = document.getElementById('indicator');
+  const txt = document.getElementById('status-text');
+
+  if (s.running) {
+    ind.className = 'indicator running';
+    txt.textContent = 'RUNNING';
+    txt.style.color = 'var(--green)';
+  } else {
+    ind.className = 'indicator ' + (s.status === 'not found' ? '' : 'stopped');
+    txt.textContent = s.status.toUpperCase();
+    txt.style.color = s.status === 'not found' ? 'var(--muted)' : 'var(--red)';
+  }
+
+  document.getElementById('uptime-label').textContent =
+    s.uptime ? 'UP ' + s.uptime : '';
+  document.getElementById('stat-id').textContent = s.container_id || '—';
+  document.getElementById('stat-image').textContent = s.image || '—';
+
+  const cpu = s.cpu_percent || 0;
+  const memUsed = s.mem_usage_mb || 0;
+  const memLimit = s.mem_limit_mb || 0;
+  const memPct = memLimit > 0 ? (memUsed / memLimit) * 100 : 0;
+
+  document.getElementById('stat-cpu').textContent =
+    s.running ? cpu.toFixed(1) + '%' : '—';
+  document.getElementById('stat-mem').textContent =
+    s.running ? memUsed.toFixed(0) + ' / ' + memLimit.toFixed(0) + ' MB' : '—';
+
+  setBar('bar-cpu', cpu);
+  setBar('bar-mem', memPct);
+
+  // Enable/disable buttons
+  document.getElementById('btn-start').disabled = s.running;
+  document.getElementById('btn-stop').disabled = !s.running;
+  document.getElementById('btn-restart').disabled = !s.running;
+
+  lastStatus = s;
+}
+
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  el.style.width = Math.min(100, pct).toFixed(1) + '%';
+  el.className = 'bar-fill' +
+    (pct > 85 ? ' danger' : pct > 65 ? ' warn' : '');
+}
+
+fetchStatus();
+setInterval(fetchStatus, 5000);
+
+// ── Server actions ─────────────────────────────────────
+async function action(cmd) {
+  const btns = ['btn-start', 'btn-stop', 'btn-restart'];
+  btns.forEach(id => document.getElementById(id).disabled = true);
+
+  const ind = document.getElementById('indicator');
+  ind.className = 'indicator loading';
+  document.getElementById('status-text').textContent = cmd.toUpperCase() + 'ING';
+
+  try {
+    const res = await fetch(API + '/api/' + cmd, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.message || 'Done');
+    } else {
+      toast(data.message || 'Error', true);
+    }
+  } catch (e) {
+    toast('Request failed', true);
+  }
+
+  // Refresh after a brief delay
+  setTimeout(fetchStatus, 2000);
+}
+
+// ── Console log stream ─────────────────────────────────
+let autoScroll = true;
+let sseSource = null;
+
+function startLogStream() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource(API + '/api/logs?tail=200');
+  sseSource.onmessage = (e) => {
+    appendLog(e.data);
+  };
+  sseSource.onerror = () => {
+    appendLog('[panel] Log stream disconnected. Reconnecting in 5s…', 'warn');
+    sseSource.close();
+    setTimeout(startLogStream, 5000);
+  };
+}
+
+function appendLog(raw, forceClass) {
+  const el = document.getElementById('console');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + (forceClass || classifyLine(raw));
+
+  // Strip Docker timestamp prefix (2024-01-15T12:34:56.789Z )
+  const cleaned = raw.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s/, '');
+  line.textContent = cleaned;
+
+  el.appendChild(line);
+
+  // Cap at 1000 lines to avoid memory growth
+  while (el.children.length > 1000) el.removeChild(el.firstChild);
+
+  if (autoScroll) el.scrollTop = el.scrollHeight;
+}
+
+function classifyLine(line) {
+  const l = line.toLowerCase();
+  if (l.includes('error') || l.includes('exception') || l.includes('fatal')) return 'error';
+  if (l.includes('warn')) return 'warn';
+  if (l.includes('info') || l.includes('joined') || l.includes('left')) return 'info';
+  return '';
+}
+
+function toggleAutoScroll() {
+  autoScroll = !autoScroll;
+  document.getElementById('scroll-state').textContent = autoScroll ? 'ON' : 'OFF';
+}
+
+function clearConsole() {
+  document.getElementById('console').innerHTML = '';
+}
+
+startLogStream();
+
+// ── Command input ──────────────────────────────────────
+async function sendCommand() {
+  const input = document.getElementById('cmd-input');
+  const command = input.value.trim();
+  if (!command) return;
+
+  appendLog('> ' + command, 'info');
+  input.value = '';
+
+  try {
+    const res = await fetch(API + '/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command })
+    });
+    const data = await res.json();
+    if (!data.ok) toast(data.message || 'Command failed', true);
+  } catch (e) {
+    toast('Command request failed', true);
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer;
+function toast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3000);
+}
+</script>
+</body>
+</html>
+`

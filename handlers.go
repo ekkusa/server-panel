@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
+	"strings"
+	"os"
 )
 
 // Handler holds all HTTP handler methods.
@@ -168,14 +171,20 @@ func (h *Handler) FilesDir(w http.ResponseWriter, r *http.Request) {
 	}
 	reqPath := r.URL.Query().Get("path")
 	if reqPath == "" {
+		reqPath = "/data"
+	}
+	// Map /data to the actual dataPath
+	if reqPath == "/data" {
 		reqPath = h.dataPath
+	} else if strings.HasPrefix(reqPath, "/data/") {
+		reqPath = filepath.Join(h.dataPath, strings.TrimPrefix(reqPath, "/data"))
 	}
 	safe, err := safePath(h.dataPath, reqPath)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: err.Error()})
 		return
 	}
-	listing, err := h.dc.ListDir(r.Context(), safe)
+	listing, err := ListDir(safe)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
@@ -190,12 +199,18 @@ func (h *Handler) FileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reqPath := r.URL.Query().Get("path")
+	// Map /data to the actual dataPath
+	if reqPath == "/data" {
+		reqPath = h.dataPath
+	} else if strings.HasPrefix(reqPath, "/data/") {
+		reqPath = filepath.Join(h.dataPath, strings.TrimPrefix(reqPath, "/data"))
+	}
 	safe, err := safePath(h.dataPath, reqPath)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: err.Error()})
 		return
 	}
-	fc, err := h.dc.ReadFile(r.Context(), safe)
+	fc, err := ReadFile(safe)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
@@ -217,12 +232,19 @@ func (h *Handler) FileWrite(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
 		return
 	}
-	safe, err := safePath(h.dataPath, body.Path)
+	reqPath := body.Path
+	// Map /data to the actual dataPath
+	if reqPath == "/data" {
+		reqPath = h.dataPath
+	} else if strings.HasPrefix(reqPath, "/data/") {
+		reqPath = filepath.Join(h.dataPath, strings.TrimPrefix(reqPath, "/data"))
+	}
+	safe, err := safePath(h.dataPath, reqPath)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: err.Error()})
 		return
 	}
-	if err := h.dc.WriteFile(r.Context(), safe, []byte(body.Content)); err != nil {
+	if err := WriteFile(safe, []byte(body.Content)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
@@ -235,13 +257,91 @@ func (h *Handler) Mods(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
 		return
 	}
-	modsPath := h.dataPath + "/mods"
-	listing, err := h.dc.ListDir(r.Context(), modsPath)
+	modsPath := filepath.Join(h.dataPath, "mods")
+	listing, err := ListDir(modsPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, listing)
+}
+
+// POST /api/mods/enable  — move mod from disabled back to mods folder
+func (h *Handler) ModEnable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
+		return
+	}
+	// Map /data to actual dataPath
+	modPath := body.Path
+	if strings.HasPrefix(modPath, "/data/") {
+		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
+	}
+	fileName := filepath.Base(modPath)
+	enabledPath := filepath.Join(h.dataPath, "mods", fileName)
+	
+	if err := os.Rename(modPath, enabledPath); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod enabled"})
+}
+
+// POST /api/mods/disable  — move mod to disabled folder
+func (h *Handler) ModDisable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
+		return
+	}
+	// Map /data to actual dataPath
+	modPath := body.Path
+	if strings.HasPrefix(modPath, "/data/") {
+		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
+	}
+	if err := disableMod(modPath, h.dataPath); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod disabled"})
+}
+
+// POST /api/mods/remove  — delete mod
+func (h *Handler) ModRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
+		return
+	}
+	// Map /data to actual dataPath
+	modPath := body.Path
+	if strings.HasPrefix(modPath, "/data/") {
+		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
+	}
+	if err := os.Remove(modPath); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod removed"})
 }
 
 // GET /api/config  — read docker-compose file from host

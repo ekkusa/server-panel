@@ -17,7 +17,7 @@ func main() {
 	}
 	dataPath := os.Getenv("DATA_PATH")
 	if dataPath == "" {
-		dataPath = "/data"
+		dataPath = "/home/exer/Downloads/files/data"
 	}
 
 	dc, err := NewDockerClient(containerName)
@@ -39,6 +39,9 @@ func main() {
 	mux.HandleFunc("/api/files", h.FilesDir)
 	mux.HandleFunc("/api/files/content", h.FileContent)
 	mux.HandleFunc("/api/files/write", h.FileWrite)
+	mux.HandleFunc("/api/mods/enable", h.ModEnable)
+	mux.HandleFunc("/api/mods/disable", h.ModDisable)
+	mux.HandleFunc("/api/mods/remove", h.ModRemove)
 	mux.HandleFunc("/api/mods", h.Mods)
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {

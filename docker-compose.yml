@@ -5,7 +5,6 @@ services:
     environment:
       EULA: "TRUE"
       ENABLE_RCON: "true"
-      RCON_PASSWORD: "changeme"
     ports:
       - "25565:25565"
     volumes:

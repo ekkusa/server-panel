@@ -220,6 +220,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .mod-item{background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px}
 .mod-icon{font-size:16px;flex-shrink:0}
 .mod-name{font-family:var(--mono);font-size:0.72rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mod-item{background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;position:relative}
+.mod-actions{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
+.mod-item:hover .mod-actions{display:flex}
+.mod-btn{background:var(--card);border:1px solid var(--border2);color:var(--muted);padding:2px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem;transition:color .12s,border-color .12s}
+.mod-btn:hover{color:var(--text);border-color:#444}
+.mod-btn-remove:hover{color:var(--red);border-color:var(--red)}
+.mod-btn-disable:hover{color:var(--amber);border-color:var(--amber)}
 
 /* Overview */
 .overview-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;overflow-y:auto}
@@ -466,14 +473,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
           </div>
         </div>
 
-        <!-- Mods -->
-        <div class="tab-panel" id="panel-mods">
-          <div class="mod-header">
-            <div class="mod-count" id="mod-count">Loading mods...</div>
-            <button class="con-btn" onclick="fetchMods()">Refresh</button>
-          </div>
-          <div class="mod-grid" id="mod-grid"></div>
-        </div>
+	<!-- Mods -->
+	  <div class="tab-panel" id="panel-mods">
+  	    <div class="mod-header">
+    	    <div class="mod-count" id="mod-count">Loading mods...</div>
+    	    <div style="margin-left:auto;display:flex;gap:6px">
+      	    <button class="con-btn" id="disabled-toggle-btn" onclick="toggleDisabledView()" style="display:none">Show Disabled</button>
+      	    <button class="con-btn" onclick="fetchMods()">Refresh</button>
+    	</div>
+  	</div>
+ 	 <div class="mod-grid" id="mod-grid"></div>
+	</div>
 
         <!-- Config -->
         <div class="tab-panel" id="panel-config">
@@ -592,12 +602,21 @@ function setNav(el) {
 async function fetchStatus() {
   if (!currentUser) return;
   try {
-    var res = await fetch(API + '/api/status');
-    var s = await res.json();
+    const res = await fetch(API + '/api/status', { 
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) throw new Error('Status API error');
+    const s = await res.json();
     applyStatus(s);
-  } catch(e) { setOffline(); }
-  clearTimeout(pollTimer);
-  pollTimer = setTimeout(fetchStatus, 5000);
+    
+    // Only keep polling if server is running
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(fetchStatus, 5000);
+  } catch(e) { 
+    setOffline();
+    // Stop polling entirely on error
+    clearTimeout(pollTimer);
+  }
 }
 
 function applyStatus(s) {
@@ -742,12 +761,18 @@ async function sendCommand() {
 async function fetchPlayers() {
   if (!currentUser) return;
   try {
-    var res = await fetch(API + '/api/players');
-    var data = await res.json();
+    const res = await fetch(API + '/api/players');
+    if (!res.ok) throw new Error('Players API error');
+    const data = await res.json();
     applyPlayers(data);
-  } catch(e) {}
-  clearTimeout(playerPollTimer);
-  playerPollTimer = setTimeout(fetchPlayers, 10000);
+    
+    // Only keep polling if server is running
+    clearTimeout(playerPollTimer);
+    playerPollTimer = setTimeout(fetchPlayers, 10000);
+  } catch(e) {
+    // Stop polling on error
+    clearTimeout(playerPollTimer);
+  }
 }
 
 function applyPlayers(data) {
@@ -807,7 +832,7 @@ function renderBreadcrumb(path) {
   var rootSpan = document.createElement('span');
   rootSpan.className = 'breadcrumb-part';
   rootSpan.textContent = '/';
-  rootSpan.onclick = (function() { return function() { loadFiles('/'); }; })();
+  rootSpan.onclick = (function() { return function() { loadFiles('/data'); }; })();
   bc.appendChild(rootSpan);
   parts.forEach(function(part, i) {
     accumulated += '/' + part;
@@ -898,6 +923,8 @@ async function saveFile() {
 }
 
 // Mods
+var showingDisabled = false;
+
 async function fetchMods() {
   document.getElementById('mod-count').textContent = 'Loading mods...';
   document.getElementById('mod-grid').innerHTML = '';
@@ -905,22 +932,107 @@ async function fetchMods() {
     var res = await fetch(API + '/api/mods');
     var data = await res.json();
     var entries = (data.entries || []).filter(function(e) { return !e.is_dir; });
-    document.getElementById('mod-count').textContent = entries.length + ' mod' + (entries.length !== 1 ? 's' : '') + ' installed';
-    var grid = document.getElementById('mod-grid');
-    if (entries.length === 0) {
-      grid.innerHTML = '<div class="file-empty" style="grid-column:1/-1">No mods found in /data/mods</div>';
+    
+    var disabledEntries = [];
+    try {
+      var disabledRes = await fetch(API + '/api/files?path=' + encodeURIComponent('/data/mods/disabled'));
+      var disabledData = await disabledRes.json();
+      disabledEntries = (disabledData.entries || []).filter(function(e) { return !e.is_dir; });
+    } catch(e) {
+      // disabled folder doesn't exist yet
+    }
+    
+    document.getElementById('disabled-toggle-btn').style.display = disabledEntries.length > 0 ? 'block' : 'none';
+    
+    var entriesToShow = showingDisabled ? disabledEntries : entries;
+    var totalCount = entries.length;
+    var disabledCount = disabledEntries.length;
+    
+    if (showingDisabled) {
+      document.getElementById('mod-count').textContent = 'Disabled mods (' + disabledCount + ')';
     } else {
-      entries.forEach(function(e, i) {
+      document.getElementById('mod-count').textContent = totalCount + ' mod' + (totalCount !== 1 ? 's' : '') + ' installed' + (disabledCount > 0 ? ' (' + disabledCount + ' disabled)' : '');
+    }
+    
+    var grid = document.getElementById('mod-grid');
+    if (entriesToShow.length === 0) {
+      grid.innerHTML = '<div class="file-empty" style="grid-column:1/-1">No mods found</div>';
+    } else {
+      entriesToShow.forEach(function(e, i) {
         var item = document.createElement('div');
         item.className = 'mod-item';
         item.style.animationDelay = (i * 0.02) + 's';
         item.style.animation = 'fadeUp .25s ease both';
-        item.innerHTML = '<span class="mod-icon">&#x1F4E6;</span><span class="mod-name" title="' + escHtml(e.name) + '">' + escHtml(e.name) + '</span>';
+        var modName = escHtml(e.name);
+        var modPath = (showingDisabled ? '/data/mods/disabled/' : '/data/mods/') + e.name;
+        item.innerHTML = '<span class="mod-icon">&#x1F4E6;</span>' +
+          '<span class="mod-name" title="' + modName + '">' + modName + '</span>' +
+          '<div class="mod-actions">' +
+          (showingDisabled ? 
+            '<button class="mod-btn mod-btn-disable" onclick="enableMod(\'' + modPath.replace(/'/g, "\\'") + '\')">Enable</button>' +
+            '<button class="mod-btn mod-btn-remove" onclick="removeMod(\'' + modPath.replace(/'/g, "\\'") + '\')">Remove</button>'
+          :
+            '<button class="mod-btn mod-btn-disable" onclick="disableMod(\'' + modPath.replace(/'/g, "\\'") + '\')">Disable</button>' +
+            '<button class="mod-btn mod-btn-remove" onclick="removeMod(\'' + modPath.replace(/'/g, "\\'") + '\')">Remove</button>'
+          ) +
+          '</div>';
         grid.appendChild(item);
       });
     }
   } catch(e) {
     document.getElementById('mod-count').textContent = 'Failed to load mods';
+  }
+}
+
+function toggleDisabledView() {
+  showingDisabled = !showingDisabled;
+  document.getElementById('disabled-toggle-btn').textContent = showingDisabled ? 'Show Active' : 'Show Disabled';
+  fetchMods();
+}
+
+async function enableMod(path) {
+  try {
+    var res = await fetch(API + '/api/mods/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path })
+    });
+    var data = await res.json();
+    toast(data.message || 'Mod enabled', data.ok ? 'ok' : 'err');
+    if (data.ok) fetchMods();
+  } catch(e) {
+    toast('Failed to enable mod', 'err');
+  }
+}
+
+async function disableMod(path) {
+  try {
+    var res = await fetch(API + '/api/mods/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path })
+    });
+    var data = await res.json();
+    toast(data.message || 'Mod disabled', data.ok ? 'ok' : 'err');
+    if (data.ok) fetchMods();
+  } catch(e) {
+    toast('Failed to disable mod', 'err');
+  }
+}
+
+async function removeMod(path) {
+  if (!confirm('Are you sure you want to remove this mod?')) return;
+  try {
+    var res = await fetch(API + '/api/mods/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path })
+    });
+    var data = await res.json();
+    toast(data.message || 'Mod removed', data.ok ? 'ok' : 'err');
+    if (data.ok) fetchMods();
+  } catch(e) {
+    toast('Failed to remove mod', 'err');
   }
 }
 
@@ -933,8 +1045,7 @@ async function fetchConfig() {
     document.getElementById('config-filename').textContent = data.filename || 'docker-compose.yml';
     document.getElementById('config-content').value = data.content || '';
   } catch(e) {
-    document.getElementById('config-content').value = 'Could not load docker-compose file.
-Make sure it is in the same directory as the panel binary.';
+    document.getElementById('config-content').value = 'Could not load docker-compose file.\nMake sure it is in the same directory as the panel binary.';
   }
 }
 

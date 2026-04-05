@@ -1,15 +1,11 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"context"
 	"fmt"
-	"io"
-	"path"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
-
-	"github.com/docker/docker/api/types"
+	"os"
 )
 
 // FileEntry is one item in a directory listing.
@@ -48,111 +44,79 @@ func isTextFile(name string) bool {
 	return textExtensions[strings.ToLower(name[idx:])]
 }
 
-// ListDir lists the immediate contents of dirPath inside the container
-// using `ls -1p` via exec.
-func (dc *DockerClient) ListDir(ctx context.Context, dirPath string) (*DirListing, error) {
-	id, err := dc.findContainer(ctx)
+// ListDir lists the immediate contents of dirPath from the host filesystem.
+func ListDir(dirPath string) (*DirListing, error) {
+	entries, err := ioutil.ReadDir(dirPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading directory: %w", err)
 	}
-
-	exec, err := dc.cli.ContainerExecCreate(ctx, id, types.ExecConfig{
-		AttachStdout: true,
-		AttachStderr: true,
-		Cmd:          []string{"sh", "-c", "ls -1p '" + strings.ReplaceAll(dirPath, "'", "'\\''") + "' 2>&1"},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("exec create: %w", err)
-	}
-
-	resp, err := dc.cli.ContainerExecAttach(ctx, exec.ID, types.ExecStartCheck{})
-	if err != nil {
-		return nil, fmt.Errorf("exec attach: %w", err)
-	}
-	defer resp.Close()
-
-	var buf bytes.Buffer
-	readDockerStream(resp.Reader, &buf)
 
 	listing := &DirListing{Path: dirPath, Entries: []FileEntry{}}
-	for _, line := range strings.Split(buf.String(), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		isDir := strings.HasSuffix(line, "/")
+	for _, entry := range entries {
 		listing.Entries = append(listing.Entries, FileEntry{
-			Name:  strings.TrimSuffix(line, "/"),
-			IsDir: isDir,
+			Name:  entry.Name(),
+			IsDir: entry.IsDir(),
+			Size:  entry.Size(),
 		})
 	}
 	return listing, nil
 }
 
-// ReadFile reads a single file from inside the container via CopyFromContainer.
-func (dc *DockerClient) ReadFile(ctx context.Context, filePath string) (*FileContent, error) {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if !isTextFile(path.Base(filePath)) {
+// ReadFile reads a single file from the host filesystem.
+func ReadFile(filePath string) (*FileContent, error) {
+	if !isTextFile(filepath.Base(filePath)) {
 		return &FileContent{Path: filePath, Binary: true}, nil
 	}
 
-	reader, _, err := dc.cli.CopyFromContainer(ctx, id, filePath)
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("copy from container: %w", err)
-	}
-	defer reader.Close()
-
-	tr := tar.NewReader(reader)
-	if _, err := tr.Next(); err != nil {
-		return nil, fmt.Errorf("reading tar header: %w", err)
-	}
-	data, err := io.ReadAll(tr)
-	if err != nil {
-		return nil, fmt.Errorf("reading content: %w", err)
+		return nil, fmt.Errorf("reading file: %w", err)
 	}
 	return &FileContent{Path: filePath, Content: string(data)}, nil
 }
 
-// WriteFile writes content to a file inside the container via CopyToContainer.
-func (dc *DockerClient) WriteFile(ctx context.Context, filePath string, content []byte) error {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return err
+// WriteFile writes content to a file on the host filesystem.
+func WriteFile(filePath string, content []byte) error {
+	if err := ioutil.WriteFile(filePath, content, 0644); err != nil {
+		return fmt.Errorf("writing file: %w", err)
 	}
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	if err := tw.WriteHeader(&tar.Header{
-		Name: path.Base(filePath),
-		Size: int64(len(content)),
-		Mode: 0644,
-	}); err != nil {
-		return err
-	}
-	if _, err := tw.Write(content); err != nil {
-		return err
-	}
-	tw.Close()
-
-	return dc.cli.CopyToContainer(ctx, id, path.Dir(filePath), &buf, types.CopyToContainerOptions{})
+	return nil
 }
 
 // safePath ensures the requested path is under dataPath to prevent traversal.
 func safePath(dataPath, requested string) (string, error) {
-	// If the request is already an absolute path under dataPath, use it.
-	// Otherwise join it with dataPath.
-	var full string
-	if strings.HasPrefix(requested, "/") {
-		full = path.Clean(requested)
-	} else {
-		full = path.Clean(path.Join(dataPath, requested))
+	// Convert to absolute paths for comparison
+	absData, err := filepath.Abs(dataPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid data path: %w", err)
 	}
-	if !strings.HasPrefix(full+"/", path.Clean(dataPath)+"/") {
+
+	var full string
+	if filepath.IsAbs(requested) {
+		full = filepath.Clean(requested)
+	} else {
+		full = filepath.Clean(filepath.Join(absData, requested))
+	}
+
+	// Ensure full path is under dataPath
+	if !strings.HasPrefix(full+"/", absData+"/") && full != absData {
 		return "", fmt.Errorf("path outside data directory")
 	}
 	return full, nil
+}
+
+// disableMod moves a mod file to a disabled folder
+func disableMod(modPath, dataPath string) error {
+	disabledDir := filepath.Join(dataPath, "mods", "disabled")
+	if err := os.MkdirAll(disabledDir, 0755); err != nil {
+		return fmt.Errorf("creating disabled directory: %w", err)
+	}
+	
+	fileName := filepath.Base(modPath)
+	disabledPath := filepath.Join(disabledDir, fileName)
+	
+	if err := os.Rename(modPath, disabledPath); err != nil {
+		return fmt.Errorf("moving mod to disabled: %w", err)
+	}
+	return nil
 }

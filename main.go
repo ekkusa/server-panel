@@ -11,10 +11,13 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
 	containerName := os.Getenv("CONTAINER_NAME")
 	if containerName == "" {
 		containerName = "minecraft"
+	}
+	dataPath := os.Getenv("DATA_PATH")
+	if dataPath == "" {
+		dataPath = "/data"
 	}
 
 	dc, err := NewDockerClient(containerName)
@@ -23,7 +26,7 @@ func main() {
 	}
 	defer dc.Close()
 
-	h := NewHandler(dc)
+	h := NewHandler(dc, dataPath)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", h.Status)
@@ -32,10 +35,21 @@ func main() {
 	mux.HandleFunc("/api/restart", h.Restart)
 	mux.HandleFunc("/api/logs", h.StreamLogs)
 	mux.HandleFunc("/api/command", h.Command)
-	mux.HandleFunc("/", serveFrontend) // HTML baked into binary — no static/ dir needed
+	mux.HandleFunc("/api/players", h.Players)
+	mux.HandleFunc("/api/files", h.FilesDir)
+	mux.HandleFunc("/api/files/content", h.FileContent)
+	mux.HandleFunc("/api/files/write", h.FileWrite)
+	mux.HandleFunc("/api/mods", h.Mods)
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.ConfigGet(w, r)
+		} else {
+			h.ConfigSet(w, r)
+		}
+	})
+	mux.HandleFunc("/", serveFrontend)
 
-	log.Printf("🟢 Minecraft Panel running on http://localhost:%s", port)
-	log.Printf("📦 Managing container: %s", containerName)
+	log.Printf("Minecraft Panel on http://localhost:%s  container=%s  data=%s", port, containerName, dataPath)
 	log.Fatal(http.ListenAndServe(":"+port, corsMiddleware(mux)))
 }
 

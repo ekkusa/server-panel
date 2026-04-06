@@ -1,10 +1,30 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 )
+
+// rconNoisePatterns are Docker log lines we suppress globally.
+// These are RCON connection handshake messages, not actual command output.
+var rconNoisePatterns = []string{
+	"RCON Listener",
+	"Thread RCON Client",
+	"RCON Client #",
+}
+
+func isRconNoise(line string) bool {
+	for _, p := range rconNoisePatterns {
+		if strings.Contains(line, p) {
+			return true
+		}
+	}
+	return false
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -19,6 +39,10 @@ func main() {
 	if dataPath == "" {
 		dataPath = "/home/exer/Downloads/files/data"
 	}
+	logFile := os.Getenv("LOG_FILE")
+	if logFile == "" {
+		logFile = "panel-console.log"
+	}
 
 	dc, err := NewDockerClient(containerName)
 	if err != nil {
@@ -26,7 +50,35 @@ func main() {
 	}
 	defer dc.Close()
 
-	h := NewHandler(dc, dataPath)
+	lb := NewLogBuffer()
+	defer lb.Close()
+
+	// Load persisted log history from disk.
+	if err := lb.LoadFromFile(logFile); err != nil {
+		log.Printf("Warning: could not load log file %q: %v", logFile, err)
+	} else {
+		log.Printf("Loaded console history from %s", logFile)
+	}
+
+	// Background: pump Docker logs into the buffer.
+	// First connect tails 500 lines; reconnects use tail=0 to avoid duplicates.
+	go func() {
+		firstConnect := true
+		for {
+			tail := "0"
+			if firstConnect {
+				tail = "500"
+			}
+			err := dc.StreamLogs(context.Background(), &bufferWriter{lb: lb}, tail)
+			if err != nil {
+				log.Printf("docker log stream error: %v — retrying in 5s", err)
+			}
+			firstConnect = false
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	h := NewHandler(dc, dataPath, lb)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", h.Status)
@@ -54,6 +106,31 @@ func main() {
 
 	log.Printf("Minecraft Panel on http://localhost:%s  container=%s  data=%s", port, containerName, dataPath)
 	log.Fatal(http.ListenAndServe(":"+port, corsMiddleware(mux)))
+}
+
+// bufferWriter splits incoming bytes on newlines and pushes each line into
+// the LogBuffer, filtering RCON noise globally.
+type bufferWriter struct {
+	lb      *LogBuffer
+	partial strings.Builder
+}
+
+func (bw *bufferWriter) Write(p []byte) (int, error) {
+	bw.partial.Write(p)
+	for {
+		s := bw.partial.String()
+		idx := strings.IndexByte(s, '\n')
+		if idx < 0 {
+			break
+		}
+		line := strings.TrimRight(s[:idx], "\r")
+		bw.partial.Reset()
+		bw.partial.WriteString(s[idx+1:])
+		if line != "" && !isRconNoise(line) {
+			bw.lb.Push(line, "docker")
+		}
+	}
+	return len(p), nil
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

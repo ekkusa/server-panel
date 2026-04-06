@@ -14,7 +14,7 @@ const indexHTML = `
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MC Panel</title>
+<title>Miyoubi Panel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -152,7 +152,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .console-actions{margin-left:auto;display:flex;gap:5px;align-items:center}
 .con-btn{background:var(--card2);border:1px solid var(--border2);color:var(--muted);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.65rem;transition:color .12s,border-color .12s}
 .con-btn:hover{color:var(--text);border-color:#444}
-.con-btn.active-filter{color:var(--amber);border-color:var(--amber)}
+
 #console{flex:1;background:#0d0d0d;border:1px solid var(--border);border-radius:6px;overflow-y:auto;padding:10px 12px;font-family:var(--mono);font-size:0.72rem;line-height:1.75;color:#888}
 #console::-webkit-scrollbar{width:4px}
 #console::-webkit-scrollbar-track{background:transparent}
@@ -164,7 +164,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .console-input-row{display:flex;margin-top:7px;flex-shrink:0;border:1px solid var(--border2);border-radius:5px;overflow:hidden;transition:border-color .15s}
 .console-input-row:focus-within{border-color:#444}
 .input-prompt{background:var(--card2);border-right:1px solid var(--border2);padding:0 10px;display:flex;align-items:center;color:var(--muted);font-family:var(--mono);font-size:0.78rem}
-#cmd-input{flex:1;background:var(--card);border:none;outline:none;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:0.75rem}
+#cmd-input{flex:1;background:var(--card);border:none;outline:none;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:0.75rem}#cmd-input:disabled{color:var(--muted2);cursor:not-allowed}.console-offline-msg{display:none;align-items:center;justify-content:center;gap:8px;padding:8px 12px;margin-top:7px;background:var(--card2);border:1px solid var(--border2);border-radius:5px;font-size:0.72rem;color:var(--muted);flex-shrink:0}.console-offline-msg.visible{display:flex}
 #cmd-input::placeholder{color:var(--muted2)}
 .cmd-send{background:var(--card2);border:none;border-left:1px solid var(--border2);color:var(--muted);padding:0 12px;cursor:pointer;display:flex;align-items:center;transition:background .12s,color .12s}
 .cmd-send:hover{background:var(--card);color:var(--text)}
@@ -214,16 +214,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 /* Mods */
 .mod-header{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-bottom:8px}
 .mod-count{font-size:0.72rem;color:var(--muted)}
-.mod-grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;align-content:start}
+.mod-grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;align-content:start}
 .mod-grid::-webkit-scrollbar{width:4px}
 .mod-grid::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.mod-item{background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px}
+.mod-item{background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;position:relative}
 .mod-icon{font-size:16px;flex-shrink:0}
 .mod-name{font-family:var(--mono);font-size:0.72rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mod-item{background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;position:relative}
-.mod-actions{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
+.mod-actions{display:flex;flex-direction:row;gap:4px;width:auto}
 .mod-item:hover .mod-actions{display:flex}
-.mod-btn{background:var(--card);border:1px solid var(--border2);color:var(--muted);padding:2px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem;transition:color .12s,border-color .12s}
+.mod-btn{background:var(--card);border:1px solid var(--border2);color:var(--muted);padding:3px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem;transition:color .12s,border-color .12s;text-align:center}
 .mod-btn:hover{color:var(--text);border-color:#444}
 .mod-btn-remove:hover{color:var(--red);border-color:var(--red)}
 .mod-btn-disable:hover{color:var(--amber);border-color:var(--amber)}
@@ -256,8 +255,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 <div id="login-overlay">
   <div class="login-box">
     <div class="login-logo">
-      <div class="login-logo-icon">&#x26F0;</div>
-      <div class="login-logo-text">MC<span> Panel</span></div>
+      <div class="login-logo-icon"><img src="https://cravatar.eu/helmavatar/miyoubi/26" style="width:26px;height:26px;border-radius:4px"></div>
+      <div class="login-logo-text">Miyoubi<span> Panel</span></div>
     </div>
     <div class="login-title">Sign in</div>
     <div class="login-sub">Enter your credentials to access the panel</div>
@@ -278,8 +277,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 <div class="app" id="app" style="display:none">
   <aside class="sidebar">
     <div class="sb-logo">
-      <div class="sb-logo-icon">&#x26F0;</div>
-      <div class="sb-logo-text">MC Panel</div>
+      <div class="sb-logo-icon"><img src="https://cravatar.eu/helmavatar/miyoubi/26" style="width:26px;height:26px;border-radius:4px"></div>
+      <div class="sb-logo-text">Miyoubi<span> Panel</span></div>
     </div>
     <div class="sb-section">Navigation</div>
     <a class="nav-item active" id="nav-dashboard" onclick="goTab('console');setNav(this)">
@@ -309,7 +308,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
   <div class="main">
     <div class="srv-header">
-      <div class="srv-icon">&#x26F0;</div>
+     <div class="srv-icon"><img src="https://cravatar.eu/helmavatar/miyoubi/44" style="width:44px;height:44px;border-radius:8px"></div>
       <div>
         <div class="srv-title" id="srv-name">Loading...</div>
         <div class="srv-desc">Docker Minecraft Server</div>
@@ -424,7 +423,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
               Server Console <span class="status-badge" id="console-badge">offline</span>
             </div>
             <div class="console-actions">
-              <button class="con-btn active-filter" id="rcon-filter-btn" onclick="toggleRconFilter()" title="Toggle RCON log filter">RCON: hidden</button>
+              
               <button class="con-btn" onclick="clearConsole()">Clear</button>
               <button class="con-btn" id="scroll-btn" onclick="toggleAutoScroll()">Auto-scroll: ON</button>
             </div>
@@ -438,7 +437,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
-          <div class="console-footer">
+          <div class="console-offline-msg" id="console-offline-msg"><span>&#x25CF;</span> Server is offline &mdash; start the server to send commands</div><div class="console-footer">
             <label><input type="checkbox" id="autoscroll-cb" checked onchange="autoScroll=this.checked"> Auto-scroll</label>
             <span>Tail: <select id="tail-sel"><option>100</option><option selected>500</option><option>1000</option></select></span>
             <span class="line-count" id="line-count">0 lines</span>
@@ -510,7 +509,6 @@ var autoScroll = true;
 var lineCount = 0;
 var sseSource = null;
 var currentUser = null;
-var filterRcon = true;
 var pollTimer, playerPollTimer;
 
 // Credentials — change these or extend with /api/login
@@ -560,8 +558,22 @@ function showApp(u) {
   document.getElementById('sb-avatar').textContent = u[0].toUpperCase();
   document.getElementById('sb-uname').textContent = u;
   fetchStatus();
+  loadHistoricalLogs();
   startLogStream();
   fetchPlayers();
+}
+
+function loadHistoricalLogs() {
+  var logs = JSON.parse(localStorage.getItem('consoleLogs') || '[]');
+  logs.forEach(function(log) {
+    var el = document.getElementById('console');
+    var div = document.createElement('div');
+    div.className = log.cls;
+    div.textContent = log.text;
+    el.appendChild(div);
+    lineCount++;
+  });
+  document.getElementById('line-count').textContent = lineCount + ' lines';
 }
 
 function doLogout() {
@@ -661,12 +673,24 @@ function applyStatus(s) {
   document.getElementById('btn-start').disabled = r;
   document.getElementById('btn-stop').disabled = !r;
   document.getElementById('btn-restart').disabled = !r;
+  setConsoleInputEnabled(r);
+}
+
+function setConsoleInputEnabled(enabled) {
+  var inp = document.getElementById('cmd-input');
+  var btn = document.querySelector('.cmd-send');
+  var msg = document.getElementById('console-offline-msg');
+  inp.disabled = !enabled;
+  inp.placeholder = enabled ? 'Enter command...' : 'Server offline';
+  if (btn) btn.disabled = !enabled;
+  if (msg) msg.className = 'console-offline-msg' + (enabled ? '' : ' visible');
 }
 
 function setOffline() {
   document.getElementById('status-text').textContent = 'OFFLINE';
   document.getElementById('status-text').className = 'stat-status-text stopped';
   document.getElementById('waveform').className = 'waveform';
+  setConsoleInputEnabled(false);
 }
 
 function setBar(id, pct) {
@@ -698,12 +722,7 @@ function startLogStream() {
   };
 }
 
-function isRconLine(line) {
-  return line.indexOf('RCON') !== -1 || line.indexOf('rcon') !== -1;
-}
-
 function appendLog(raw) {
-  if (filterRcon && isRconLine(raw)) return;
   var el = document.getElementById('console');
   var div = document.createElement('div');
   var lo = raw.toLowerCase();
@@ -716,6 +735,13 @@ function appendLog(raw) {
   el.appendChild(div);
   lineCount++;
   document.getElementById('line-count').textContent = lineCount + ' lines';
+  
+  // Save to localStorage
+  var logs = JSON.parse(localStorage.getItem('consoleLogs') || '[]');
+  logs.push({ cls: cls, text: div.textContent });
+  logs = logs.slice(-500); // Keep last 500
+  localStorage.setItem('consoleLogs', JSON.stringify(logs));
+  
   while (el.children.length > 2000) { el.removeChild(el.firstChild); lineCount--; }
   if (autoScroll) el.scrollTop = el.scrollHeight;
 }
@@ -730,13 +756,6 @@ function toggleAutoScroll() {
   autoScroll = !autoScroll;
   document.getElementById('autoscroll-cb').checked = autoScroll;
   document.getElementById('scroll-btn').textContent = 'Auto-scroll: ' + (autoScroll ? 'ON' : 'OFF');
-}
-
-function toggleRconFilter() {
-  filterRcon = !filterRcon;
-  var btn = document.getElementById('rcon-filter-btn');
-  btn.textContent = 'RCON: ' + (filterRcon ? 'hidden' : 'shown');
-  btn.className = 'con-btn' + (filterRcon ? ' active-filter' : '');
 }
 
 document.getElementById('tail-sel').addEventListener('change', startLogStream);
@@ -754,6 +773,7 @@ async function sendCommand() {
     });
     var data = await res.json();
     if (!data.ok) toast(data.message || 'Failed', 'err');
+    else if (data.output) appendLog(data.output);
   } catch(e) { toast('Request failed', 'err'); }
 }
 

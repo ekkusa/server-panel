@@ -4,21 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
-	"time"
-	"strings"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
-// Handler holds all HTTP handler methods.
 type Handler struct {
 	dc       *DockerClient
 	dataPath string
+	lb       *LogBuffer
 }
 
-// NewHandler creates a Handler.
-func NewHandler(dc *DockerClient, dataPath string) *Handler {
-	return &Handler{dc: dc, dataPath: dataPath}
+func NewHandler(dc *DockerClient, dataPath string, lb *LogBuffer) *Handler {
+	return &Handler{dc: dc, dataPath: dataPath, lb: lb}
 }
 
 type apiResponse struct {
@@ -56,6 +55,7 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
+	h.lb.Push("[panel] Server starting...", "panel")
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "server starting"})
 }
 
@@ -69,6 +69,7 @@ func (h *Handler) Stop(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
+	h.lb.Push("[panel] Server stopping...", "panel")
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "server stopping"})
 }
 
@@ -82,10 +83,12 @@ func (h *Handler) Restart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
+	h.lb.Push("[panel] Server restarting...", "panel")
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "server restarting"})
 }
 
-// GET /api/logs — SSE stream
+// GET /api/logs — SSE stream.
+// On connect: replay the full buffer, then stream new lines in real-time.
 func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -101,23 +104,32 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	tail := r.URL.Query().Get("tail")
-	sseWriter := &sseLineWriter{w: w, flusher: flusher}
+	// Subscribe BEFORE snapshotting so we don't miss lines that arrive
+	// between the snapshot and the subscribe.
+	ch := h.lb.Subscribe()
+	defer h.lb.Unsubscribe(ch)
+
+	// Replay history.
+	snapshot := h.lb.Snapshot()
+	for _, line := range snapshot {
+		fmt.Fprintf(w, "data: %s\n\n", line.Text)
+	}
+	flusher.Flush()
+
+	// Stream live updates.
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		h.dc.StreamLogs(r.Context(), sseWriter, tail)
-	}()
-
 	for {
 		select {
-		case <-done:
-			return
 		case <-r.Context().Done():
 			return
+		case line, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", line.Text)
+			flusher.Flush()
 		case <-ticker.C:
 			fmt.Fprintf(w, ": heartbeat\n\n")
 			flusher.Flush()
@@ -142,10 +154,22 @@ func (h *Handler) Command(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "command must not be empty"})
 		return
 	}
-	if err := h.dc.SendCommand(r.Context(), body.Command); err != nil {
+
+	output, err := h.dc.SendCommand(r.Context(), body.Command)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
 	}
+	// Push rcon output into the buffer so it persists across refreshes.
+	// The buffer deduplicates within 2s, so if the same line also appears
+	// in Docker logs it will only be shown once.
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			h.lb.Push(line, "rcon")
+		}
+	}
+
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "command sent"})
 }
 
@@ -163,7 +187,7 @@ func (h *Handler) Players(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pl)
 }
 
-// GET /api/files?path=/data/...  — list directory
+// GET /api/files
 func (h *Handler) FilesDir(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -173,7 +197,6 @@ func (h *Handler) FilesDir(w http.ResponseWriter, r *http.Request) {
 	if reqPath == "" {
 		reqPath = "/data"
 	}
-	// Map /data to the actual dataPath
 	if reqPath == "/data" {
 		reqPath = h.dataPath
 	} else if strings.HasPrefix(reqPath, "/data/") {
@@ -192,14 +215,13 @@ func (h *Handler) FilesDir(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, listing)
 }
 
-// GET /api/files/content?path=/data/...  — read file
+// GET /api/files/content
 func (h *Handler) FileContent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
 		return
 	}
 	reqPath := r.URL.Query().Get("path")
-	// Map /data to the actual dataPath
 	if reqPath == "/data" {
 		reqPath = h.dataPath
 	} else if strings.HasPrefix(reqPath, "/data/") {
@@ -218,7 +240,7 @@ func (h *Handler) FileContent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, fc)
 }
 
-// POST /api/files/write  — write file body: {path, content}
+// POST /api/files/write
 func (h *Handler) FileWrite(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -233,7 +255,6 @@ func (h *Handler) FileWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reqPath := body.Path
-	// Map /data to the actual dataPath
 	if reqPath == "/data" {
 		reqPath = h.dataPath
 	} else if strings.HasPrefix(reqPath, "/data/") {
@@ -251,7 +272,7 @@ func (h *Handler) FileWrite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "file saved"})
 }
 
-// GET /api/mods  — list mods directory
+// GET /api/mods
 func (h *Handler) Mods(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -266,27 +287,19 @@ func (h *Handler) Mods(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, listing)
 }
 
-// POST /api/mods/enable  — move mod from disabled back to mods folder
+// POST /api/mods/enable
 func (h *Handler) ModEnable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
 		return
 	}
-	var body struct {
-		Path string `json:"path"`
-	}
+	var body struct{ Path string `json:"path"` }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
 		return
 	}
-	// Map /data to actual dataPath
-	modPath := body.Path
-	if strings.HasPrefix(modPath, "/data/") {
-		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
-	}
-	fileName := filepath.Base(modPath)
-	enabledPath := filepath.Join(h.dataPath, "mods", fileName)
-	
+	modPath := mapDataPath(body.Path, h.dataPath)
+	enabledPath := filepath.Join(h.dataPath, "mods", filepath.Base(modPath))
 	if err := os.Rename(modPath, enabledPath); err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
@@ -294,24 +307,18 @@ func (h *Handler) ModEnable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod enabled"})
 }
 
-// POST /api/mods/disable  — move mod to disabled folder
+// POST /api/mods/disable
 func (h *Handler) ModDisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
 		return
 	}
-	var body struct {
-		Path string `json:"path"`
-	}
+	var body struct{ Path string `json:"path"` }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
 		return
 	}
-	// Map /data to actual dataPath
-	modPath := body.Path
-	if strings.HasPrefix(modPath, "/data/") {
-		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
-	}
+	modPath := mapDataPath(body.Path, h.dataPath)
 	if err := disableMod(modPath, h.dataPath); err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
@@ -319,24 +326,18 @@ func (h *Handler) ModDisable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod disabled"})
 }
 
-// POST /api/mods/remove  — delete mod
+// POST /api/mods/remove
 func (h *Handler) ModRemove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
 		return
 	}
-	var body struct {
-		Path string `json:"path"`
-	}
+	var body struct{ Path string `json:"path"` }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResponse{Message: "invalid JSON"})
 		return
 	}
-	// Map /data to actual dataPath
-	modPath := body.Path
-	if strings.HasPrefix(modPath, "/data/") {
-		modPath = filepath.Join(h.dataPath, strings.TrimPrefix(modPath, "/data"))
-	}
+	modPath := mapDataPath(body.Path, h.dataPath)
 	if err := os.Remove(modPath); err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiResponse{Message: err.Error()})
 		return
@@ -344,7 +345,7 @@ func (h *Handler) ModRemove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "mod removed"})
 }
 
-// GET /api/config  — read docker-compose file from host
+// GET /api/config
 func (h *Handler) ConfigGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -358,7 +359,7 @@ func (h *Handler) ConfigGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"filename": filename, "content": content})
 }
 
-// POST /api/config  — write docker-compose file body: {content}
+// POST /api/config
 func (h *Handler) ConfigSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiResponse{Message: "method not allowed"})
@@ -379,7 +380,15 @@ func (h *Handler) ConfigSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "saved " + filename})
 }
 
-// sseLineWriter emits each write as an SSE data event.
+// mapDataPath translates frontend /data/... paths to real host paths.
+func mapDataPath(p, dataPath string) string {
+	if strings.HasPrefix(p, "/data/") {
+		return filepath.Join(dataPath, strings.TrimPrefix(p, "/data"))
+	}
+	return p
+}
+
+// sseLineWriter kept for compatibility with docker.go StreamLogs signature.
 type sseLineWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher

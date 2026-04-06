@@ -186,11 +186,11 @@ func (dc *DockerClient) StreamLogs(ctx context.Context, w io.Writer, tail string
 	}
 }
 
-// SendCommand executes a Minecraft console command via rcon-cli inside the container.
-func (dc *DockerClient) SendCommand(ctx context.Context, command string) error {
+// SendCommand sends a command to the Minecraft server via rcon-cli and captures output
+func (dc *DockerClient) SendCommand(ctx context.Context, command string) (string, error) {
 	id, err := dc.findContainer(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	exec, err := dc.cli.ContainerExecCreate(ctx, id, types.ExecConfig{
@@ -199,10 +199,45 @@ func (dc *DockerClient) SendCommand(ctx context.Context, command string) error {
 		Cmd:          []string{"rcon-cli", command},
 	})
 	if err != nil {
-		return fmt.Errorf("creating exec: %w", err)
+		return "", fmt.Errorf("creating exec: %w", err)
 	}
 
-	return dc.cli.ContainerExecStart(ctx, exec.ID, types.ExecStartCheck{})
+	resp, err := dc.cli.ContainerExecAttach(ctx, exec.ID, types.ExecStartCheck{})
+	if err != nil {
+		return "", fmt.Errorf("attaching to exec: %w", err)
+	}
+	defer resp.Close()
+
+	var output strings.Builder
+	buf := make([]byte, 4096)
+	for {
+		// Read 8-byte header
+		header := make([]byte, 8)
+		_, err := io.ReadFull(resp.Conn, header)
+		if err != nil {
+			break
+		}
+		
+		// Parse frame size from header
+		size := int(header[4])<<24 | int(header[5])<<16 | int(header[6])<<8 | int(header[7])
+		if size == 0 {
+			continue
+		}
+		
+		if size > len(buf) {
+			buf = make([]byte, size)
+		}
+		
+		n, err := io.ReadFull(resp.Conn, buf[:size])
+		if n > 0 {
+			output.Write(buf[:n])
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	return strings.TrimSpace(output.String()), nil
 }
 
 func formatUptime(d time.Duration) string {

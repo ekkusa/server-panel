@@ -37,7 +37,7 @@ func main() {
 	}
 	dataPath := os.Getenv("DATA_PATH")
 	if dataPath == "" {
-		dataPath = "/home/exer/Downloads/files/data"
+		dataPath = "/home/exer/MiyoubiPanel/data"
 	}
 	logFile := os.Getenv("LOG_FILE")
 	if logFile == "" {

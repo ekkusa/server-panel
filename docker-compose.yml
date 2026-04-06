@@ -2,12 +2,29 @@ services:
   minecraft:
     image: itzg/minecraft-server
     container_name: minecraft
+    runtime: nvidia
+    entrypoint: ["/bin/bash", "-c", "./gpu.sh && /start"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 0
+              capabilities: [gpu]
     environment:
-      EULA: "TRUE"
-      ENABLE_RCON: "TRUE"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics,video
+      DIFFICULTY: "hard"
+      EULA: "true"
+      TYPE: FABRIC
+      VERSION: 1.21.11
+      ENABLE_RCON: "true"
+      RCON_PASSWORD: "changeme"
+      MODRINTH_PROJECTS: |
+        fabric-api
+      MODE: "survival"
+      MAX_MEMORY: "3G"
     ports:
-      - "25565:25565"
+      - "22553:22553"
     volumes:
       - ./data:/data
-    stdin_open: true
-    tty: true

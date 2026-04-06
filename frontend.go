@@ -248,6 +248,183 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .stat-card:nth-child(2){animation-delay:.04s}
 .stat-card:nth-child(3){animation-delay:.08s}
 .stat-card:nth-child(4){animation-delay:.12s}
+
+/* Mobile responsive - hide sidebar, make cards smaller */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
+  
+  .app {
+    flex-direction: column;
+  }
+  
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 5px;
+  }
+  
+  .stat-card {
+    padding: 8px;
+    min-height: auto;
+  }
+  
+  .stat-card-header {
+    margin-bottom: 6px;
+  }
+  
+  .stat-card-label {
+    font-size: 0.55rem;
+  }
+  
+  .stat-card-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+  
+  .waveform {
+    height: 24px;
+    margin-bottom: 4px;
+  }
+  
+  .stat-status-text {
+    font-size: 0.85rem;
+  }
+  
+  .perf-item {
+    margin-bottom: 4px;
+  }
+  
+  .info-row {
+    padding: 2px 0;
+  }
+  
+  .content-wrap {
+    flex: 1;
+    overflow: hidden;
+  }
+  
+.tab-panel {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 22px 10px;
+}
+
+#panel-settings .settings-content {
+  padding: 14px 22px;
+}
+  
+  .console-input-row {
+    margin-bottom: 10px;
+  }
+  
+  #console {
+    font-size: 0.65rem;
+    padding: 8px;
+  }
+}
+
+/* Desktop - show sidebar normally */
+@media (min-width: 769px) {
+  .sidebar {
+    display: flex;
+  }
+}
+
+.settings-tab-btn {
+  transition: color .2s, background .2s;
+}
+.settings-tab-btn:hover {
+  background: rgba(255,255,255,.02);
+}
+.settings-tab-btn.active {
+  color: var(--text);
+  border-right-color: var(--text);
+}
+
+.settings-content {
+  display: none;
+}
+.settings-content.active {
+  display: block;
+}
+.prop-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+}
+
+.prop-toggle input[type="checkbox"] {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border2);
+  border-radius: 6px;
+  background: var(--card);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.prop-toggle input[type="checkbox"]:hover {
+  border-color: var(--green);
+}
+
+.prop-toggle input[type="checkbox"]:checked {
+  background: var(--green);
+  border-color: var(--green);
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='%23166534' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100%;
+}
+
+.prop-toggle input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.prop-key {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  width: 100%;
+}
+
+.prop-value {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  #properties-list {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -391,6 +568,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <button class="tab-btn" id="tab-files" onclick="goTab('files')">Files</button>
         <button class="tab-btn" id="tab-mods" onclick="goTab('mods')">Mods</button>
         <button class="tab-btn" id="tab-config" onclick="goTab('config')">Config</button>
+	<button class="tab-btn" id="tab-settings" onclick="goTab('settings')">Settings</button>
       </div>
 
       <div class="tab-content">
@@ -443,6 +621,132 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
             <span class="line-count" id="line-count">0 lines</span>
           </div>
         </div>
+
+<!-- Settings -->
+<div class="tab-panel" id="panel-settings">
+  <div style="display:flex;height:100%;width:100%;gap:0;margin:0">
+    <!-- Settings sidebar -->
+    <div style="width:160px;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0;background:var(--card)">
+      <button class="settings-tab-btn active" onclick="goSettingsTab('server')" style="width:100%;text-align:left;padding:12px;border:none;background:transparent;color:var(--text);cursor:pointer;border-right:2px solid transparent;border-right-color:var(--text);font-size:0.8rem;font-weight:500;margin:0">Server</button>
+      <button class="settings-tab-btn" onclick="goSettingsTab('resources')" style="width:100%;text-align:left;padding:12px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-right:2px solid transparent;font-size:0.8rem;font-weight:500;margin:0">Resources</button>
+      <button class="settings-tab-btn" onclick="goSettingsTab('properties')" style="width:100%;text-align:left;padding:12px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-right:2px solid transparent;font-size:0.8rem;font-weight:500;margin:0">Properties</button>
+    </div>
+    
+    <!-- Settings content scroll wrapper -->
+    <div style="flex:1;overflow-y:auto;width:100%">
+      <!-- Server Tab -->
+      <div id="settings-server" class="settings-content active" style="padding:14px 22px">
+        <div style="margin-bottom:20px">
+          <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text)">Server Options</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:6px">Difficulty</label>
+              <select id="setting-difficulty" style="width:100%;padding:6px;background:var(--card2);border:1px solid var(--border2);color:var(--text);border-radius:4px">
+                <option value="peaceful">Peaceful</option>
+                <option value="easy">Easy</option>
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:6px">Game Mode</label>
+              <select id="setting-mode" style="width:100%;padding:6px;background:var(--card2);border:1px solid var(--border2);color:var(--text);border-radius:4px">
+                <option value="survival">Survival</option>
+                <option value="creative">Creative</option>
+                <option value="adventure">Adventure</option>
+                <option value="spectator">Spectator</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end">
+              <button class="save-btn" onclick="applyServerSettings()" style="width:100%">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text)">Performance</h3>
+          <div style="display:flex;align-items:flex-end;gap:10px">
+            <div style="flex:1">
+              <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:6px">Memory (e.g. 2G, 4G)</label>
+              <input id="setting-memory" type="text" placeholder="1G" style="width:100%;padding:6px;background:var(--card2);border:1px solid var(--border2);color:var(--text);border-radius:4px;font-family:var(--mono)">
+            </div>
+            <button class="save-btn" onclick="applyServerSettings()" style="align-self:flex-end">Apply</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text)">Features</h3>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="setting-autopause" style="cursor:pointer">
+              <span style="font-size:0.8rem">Enable AutoPause</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="setting-autostop" style="cursor:pointer">
+              <span style="font-size:0.8rem">Enable AutoStop</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="setting-whitelist" style="cursor:pointer">
+              <span style="font-size:0.8rem">Enable Whitelist</span>
+            </label>
+          </div>
+          <button class="save-btn" onclick="saveFeatures()" style="margin-top:10px;width:100%">Save Features</button>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text)">Server Message (MOTD)</h3>
+          <textarea id="setting-motd" placeholder="A Minecraft Server" style="width:100%;padding:8px;background:var(--card2);border:1px solid var(--border2);color:var(--text);border-radius:4px;font-family:var(--font);min-height:80px;resize:none;font-size:0.75rem"></textarea>
+          <button class="save-btn" onclick="saveSetting('MOTD')" style="margin-top:8px;width:100%">Update MOTD</button>
+        </div>
+      </div>
+
+<!-- Resources Tab -->
+<div id="settings-resources" class="settings-content" style="display:none;padding:14px 22px">
+  <h3 style="font-size:0.9rem;margin-bottom:15px;color:var(--text)">Docker Resources</h3>
+  <div id="resources-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;align-content:start">
+    <div class="prop-toggle"><input type="checkbox" class="res-checkbox" data-key="cpu-limit"><span class="prop-key">CPU Limit</span><input type="text" class="prop-value" data-key="cpu-limit" value="2" placeholder="2"></div>
+    <div class="prop-toggle"><input type="checkbox" class="res-checkbox" data-key="memory-limit"><span class="prop-key">Memory Limit</span><input type="text" class="prop-value" data-key="memory-limit" value="10G" placeholder="10G"></div>
+    <div class="prop-toggle"><input type="checkbox" class="res-checkbox" data-key="cpu-reservation"><span class="prop-key">CPU Reservation</span><input type="text" class="prop-value" data-key="cpu-reservation" value="0.3" placeholder="0.3"></div>
+    <div class="prop-toggle"><input type="checkbox" class="res-checkbox" data-key="memory-reservation"><span class="prop-key">Memory Reservation</span><input type="text" class="prop-value" data-key="memory-reservation" value="4G" placeholder="4G"></div>
+  </div>
+  <button class="save-btn" onclick="applyResources()" style="width:100%;margin-top:20px">Apply Resources</button>
+</div>        
+
+<!-- Properties Tab -->
+<div id="settings-properties" class="settings-content" style="display:none;padding:14px 22px">
+  <h3 style="font-size:0.9rem;margin-bottom:15px;color:var(--text)">Server Properties (Override)</h3>
+  <div id="properties-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;align-content:start">
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="difficulty"><span class="prop-key">difficulty</span><input type="text" class="prop-value" data-key="difficulty" value="hard"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="gamemode"><span class="prop-key">gamemode</span><input type="text" class="prop-value" data-key="gamemode" value="survival"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="level-name"><span class="prop-key">level-name</span><input type="text" class="prop-value" data-key="level-name" value="world"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="max-players"><span class="prop-key">max-players</span><input type="text" class="prop-value" data-key="max-players" value="20"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="motd"><span class="prop-key">motd</span><input type="text" class="prop-value" data-key="motd" value="A Minecraft Server"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="online-mode"><span class="prop-key">online-mode</span><input type="text" class="prop-value" data-key="online-mode" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="pvp"><span class="prop-key">pvp</span><input type="text" class="prop-value" data-key="pvp" value="true"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="spawn-protection"><span class="prop-key">spawn-protection</span><input type="text" class="prop-value" data-key="spawn-protection" value="16"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="view-distance"><span class="prop-key">view-distance</span><input type="text" class="prop-value" data-key="view-distance" value="10"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="simulation-distance"><span class="prop-key">simulation-distance</span><input type="text" class="prop-value" data-key="simulation-distance" value="10"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="white-list"><span class="prop-key">white-list</span><input type="text" class="prop-value" data-key="white-list" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="enable-rcon"><span class="prop-key">enable-rcon</span><input type="text" class="prop-value" data-key="enable-rcon" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="rcon.port"><span class="prop-key">rcon.port</span><input type="text" class="prop-value" data-key="rcon.port" value="25575"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="allow-flight"><span class="prop-key">allow-flight</span><input type="text" class="prop-value" data-key="allow-flight" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="enforce-whitelist"><span class="prop-key">enforce-whitelist</span><input type="text" class="prop-value" data-key="enforce-whitelist" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="level-seed"><span class="prop-key">level-seed</span><input type="text" class="prop-value" data-key="level-seed" value=""></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="enable-query"><span class="prop-key">enable-query</span><input type="text" class="prop-value" data-key="enable-query" value="false"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="query.port"><span class="prop-key">query.port</span><input type="text" class="prop-value" data-key="query.port" value="22553"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="server-port"><span class="prop-key">server-port</span><input type="text" class="prop-value" data-key="server-port" value="25565"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="server-ip"><span class="prop-key">server-ip</span><input type="text" class="prop-value" data-key="server-ip" value=""></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="max-tick-time"><span class="prop-key">max-tick-time</span><input type="text" class="prop-value" data-key="max-tick-time" value="60000"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="op-permission-level"><span class="prop-key">op-permission-level</span><input type="text" class="prop-value" data-key="op-permission-level" value="4"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="function-permission-level"><span class="prop-key">function-permission-level</span><input type="text" class="prop-value" data-key="function-permission-level" value="2"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="entity-broadcast-range-percentage"><span class="prop-key">entity-broadcast-range-percentage</span><input type="text" class="prop-value" data-key="entity-broadcast-range-percentage" value="100"></div>
+    <div class="prop-toggle"><input type="checkbox" class="prop-checkbox" data-key="rate-limit"><span class="prop-key">rate-limit</span><input type="text" class="prop-value" data-key="rate-limit" value="0"></div>
+  </div>
+  <button class="save-btn" onclick="applyProperties()" style="width:100%;margin-top:20px">Apply Properties</button>
+</div>
+</div>  <!-- This closes the settings-content scroll wrapper -->
+</div>  <!-- This closes the settings flex container -->
+</div>  <!-- This closes panel-settings -->
 
         <!-- Players -->
         <div class="tab-panel" id="panel-players">
@@ -620,6 +924,7 @@ async function fetchStatus() {
     if (!res.ok) throw new Error('Status API error');
     const s = await res.json();
     applyStatus(s);
+    checkAndClearConsole(s);
     
     // Only keep polling if server is running
     clearTimeout(pollTimer);
@@ -674,6 +979,20 @@ function applyStatus(s) {
   document.getElementById('btn-stop').disabled = !r;
   document.getElementById('btn-restart').disabled = !r;
   setConsoleInputEnabled(r);
+}
+
+// Auto-clear console if panel started but server isn't running
+function checkAndClearConsole(s) {
+  var isServerRunning = s.running;
+  var isPanelJustStarted = lineCount > 0 && !document.getElementById('console').dataset.serverWasRunning;
+  
+  // If server is not running and this is the first check after panel start
+  if (!isServerRunning && isPanelJustStarted) {
+    clearConsole();
+    document.getElementById('console').dataset.serverWasRunning = 'false';
+  } else if (isServerRunning) {
+    document.getElementById('console').dataset.serverWasRunning = 'true';
+  }
 }
 
 function setConsoleInputEnabled(enabled) {
@@ -1107,6 +1426,365 @@ function toast(msg, type) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function() { el.className = ''; }, 3000);
 }
+
+// Settings functions
+async function loadSettings() {
+  try {
+    const configRes = await fetch(API + '/api/config');
+    const config = await configRes.json();
+    const content = config.content || '';
+    
+    // Parse environment variables from docker-compose
+    function getEnvValue(envVar) {
+      const pattern = new RegExp(envVar + ':\\s*["\']?([^"\'\\n]+)["\']?');
+      const match = content.match(pattern);
+      return match ? match[1].trim() : null;
+    }
+    
+    // Load difficulty and mode
+    const difficulty = getEnvValue('DIFFICULTY');
+    const mode = getEnvValue('MODE');
+    const memory = getEnvValue('MEMORY') || getEnvValue('MAX_MEMORY');
+    const motd = getEnvValue('MOTD');
+    
+    if (difficulty) document.getElementById('setting-difficulty').value = difficulty;
+    if (mode) document.getElementById('setting-mode').value = mode;
+    if (memory) document.getElementById('setting-memory').value = memory;
+    if (motd) document.getElementById('setting-motd').value = motd;
+    
+    // Load feature toggles
+    const autopause = getEnvValue('ENABLE_AUTOPAUSE');
+    const autostop = getEnvValue('ENABLE_AUTOSTOP');
+    const whitelist = getEnvValue('ENABLE_WHITELIST');
+    
+    document.getElementById('setting-autopause').checked = autopause === 'true' || autopause === 'TRUE';
+    document.getElementById('setting-autostop').checked = autostop === 'true' || autostop === 'TRUE';
+    document.getElementById('setting-whitelist').checked = whitelist === 'true' || whitelist === 'TRUE';
+    
+  } catch(e) {
+    console.log('Could not load settings:', e);
+  }
+}
+
+async function applyServerSettings() {
+  const difficulty = document.getElementById('setting-difficulty').value;
+  const mode = document.getElementById('setting-mode').value;
+  const memory = document.getElementById('setting-memory').value.trim();
+  
+  if (!memory) {
+    toast('Please enter a memory value', 'err');
+    return;
+  }
+  
+  try {
+    const configRes = await fetch(API + '/api/config');
+    const config = await configRes.json();
+    let content = config.content || '';
+    
+    // Update all three settings
+    const settings = {
+      DIFFICULTY: difficulty,
+      MODE: mode,
+      MAX_MEMORY: memory
+    };
+    
+    Object.entries(settings).forEach(([key, value]) => {
+      const pattern = new RegExp('^(\\s+' + key + ':\\s*)["\']?[^"\'\\n]+["\']?', 'im');
+      
+      if (pattern.test(content)) {
+        content = content.replace(pattern, '      ' + key + ': "' + value + '"');
+      } else {
+        const envMatch = content.match(/environment:\n/);
+        if (envMatch) {
+          const envStart = content.indexOf(envMatch[0]) + envMatch[0].length;
+          content = content.slice(0, envStart) + '      ' + key + ': "' + value + '"\n' + content.slice(envStart);
+        }
+      }
+    });
+    
+    const res = await fetch(API + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    
+    const data = await res.json();
+    if (data.ok) {
+      toast('Settings applied!', 'ok');
+      loadSettings();
+    } else {
+      toast(data.message || 'Failed to apply settings', 'err');
+    }
+  } catch(e) {
+    toast('Error applying settings', 'err');
+  }
+}
+
+async function applyServerSettings() {
+  const difficulty = document.getElementById('setting-difficulty').value;
+  const mode = document.getElementById('setting-mode').value;
+  const memory = document.getElementById('setting-memory').value.trim();
+  
+  if (!memory) {
+    toast('Please enter a memory value', 'err');
+    return;
+  }
+  
+  try {
+    const configRes = await fetch(API + '/api/config');
+    const config = await configRes.json();
+    let content = config.content || '';
+    
+    // Remove duplicate MAX_MEMORY if it exists
+    content = content.replace(/MAX_MEMORY:.*?\n/g, '');
+    content = content.replace(/MEMORY:.*?\n/g, '');
+    
+    // Update settings
+    const settings = {
+      DIFFICULTY: difficulty,
+      MODE: mode,
+      MAX_MEMORY: memory
+    };
+    
+    Object.entries(settings).forEach(([key, value]) => {
+      const pattern = new RegExp('^\\s+' + key + ':.*$', 'im');
+      
+      if (pattern.test(content)) {
+        content = content.replace(pattern, '      ' + key + ': "' + value + '"');
+      } else {
+        // Find the last line of environment section and add before it
+        const envMatch = content.match(/environment:\n([\s\S]*?)\n\s{0,4}[a-z]/);
+        if (envMatch) {
+          const lastEnvLine = envMatch[0].lastIndexOf('\n');
+          const insertPoint = content.indexOf(envMatch[0]) + lastEnvLine;
+          content = content.slice(0, insertPoint) + '\n      ' + key + ': "' + value + '"' + content.slice(insertPoint);
+        }
+      }
+    });
+    
+    const res = await fetch(API + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    
+    const data = await res.json();
+    if (data.ok) {
+      toast('Settings applied!', 'ok');
+      loadSettings();
+    } else {
+      toast(data.message || 'Failed to apply settings', 'err');
+    }
+  } catch(e) {
+    toast('Error applying settings', 'err');
+  }
+}
+
+async function saveFeatures() {
+  const features = {
+    ENABLE_AUTOPAUSE: document.getElementById('setting-autopause').checked ? 'true' : 'false',
+    ENABLE_AUTOSTOP: document.getElementById('setting-autostop').checked ? 'true' : 'false',
+    ENABLE_WHITELIST: document.getElementById('setting-whitelist').checked ? 'true' : 'false'
+  };
+  
+  try {
+    const configRes = await fetch(API + '/api/config');
+    const config = await configRes.json();
+    let content = config.content || '';
+    
+    Object.entries(features).forEach(([key, value]) => {
+      const pattern = new RegExp('(\\s+' + key + ':\\s*["\']?)([^"\'\\n]+)(["\']?)', 'i');
+      
+      if (pattern.test(content)) {
+        // Replace existing variable
+        content = content.replace(pattern, '$1' + value + '$3');
+      } else {
+        // Add new variable in the environment section
+        const envMatch = content.match(/environment:\n/i);
+        if (envMatch) {
+          const insertPoint = content.indexOf(envMatch[0]) + envMatch[0].length;
+          content = content.slice(0, insertPoint) + '      ' + key + ': ' + value + '\n' + content.slice(insertPoint);
+        }
+      }
+    });
+    
+    const res = await fetch(API + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    
+    const data = await res.json();
+    if (data.ok) {
+      toast('Features updated!', 'ok');
+    } else {
+      toast(data.message || 'Failed to update features', 'err');
+    }
+  } catch(e) {
+    toast('Error updating features', 'err');
+  }
+}
+
+// Settings tab switching
+function goSettingsTab(tab) {
+  document.querySelectorAll('.settings-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.settings-content').forEach(function(c) { c.style.display = 'none'; });
+  
+  var btn = document.querySelector('[onclick="goSettingsTab(\'' + tab + '\')"]');
+  if (btn) btn.classList.add('active');
+  
+  var content = document.getElementById('settings-' + tab);
+  if (content) content.style.display = 'block';
+  
+  // Force reflow to update colors
+  void content.offsetHeight;
+}
+
+// Load server.properties file
+function loadServerProperties() {
+}
+
+function applyResources() {
+  var overrides = {};
+  var hasAny = false;
+  
+  document.querySelectorAll('.res-checkbox').forEach(function(checkbox) {
+    var key = checkbox.dataset.key;
+    var input = document.querySelector('.prop-value[data-key="' + key + '"]');
+    var value = input.value || input.placeholder;
+    
+    if (checkbox.checked) {
+      hasAny = true;
+      overrides[key] = value;
+    }
+  });
+  
+  if (!hasAny) {
+    toast('Select at least one resource to override', 'err');
+    return;
+  }
+  
+  fetch(API + '/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(config) {
+      var content = config.content || '';
+      
+      // Remove existing resources section
+      content = content.replace(/\s+resources:[\s\S]*?(?=\n\s{0,4}[a-z]|\n\n|$)/g, '');
+      
+      if (hasAny) {
+        var portsIndex = content.indexOf('ports:');
+        if (portsIndex !== -1) {
+          var resourcesSection = '\n    resources:\n';
+          resourcesSection += '      limits:\n';
+          if (overrides['cpu-limit']) resourcesSection += '        cpus: \'' + overrides['cpu-limit'] + '\'\n';
+          if (overrides['memory-limit']) resourcesSection += '        memory: ' + overrides['memory-limit'] + '\n';
+          resourcesSection += '      reservations:\n';
+          if (overrides['cpu-reservation']) resourcesSection += '        cpus: \'' + overrides['cpu-reservation'] + '\'\n';
+          if (overrides['memory-reservation']) resourcesSection += '        memory: ' + overrides['memory-reservation'] + '\n';
+          
+          content = content.slice(0, portsIndex) + resourcesSection + '    ' + content.slice(portsIndex);
+        }
+      }
+      
+      return fetch(API + '/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content })
+      });
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        toast('Resources applied!', 'ok');
+      } else {
+        toast(data.message || 'Failed to apply resources', 'err');
+      }
+    })
+    .catch(function(e) { toast('Error applying resources', 'err'); });
+}
+
+// Apply server properties overrides
+function applyProperties() {
+  var overrides = [];
+  document.querySelectorAll('.prop-checkbox').forEach(function(checkbox) {
+    if (checkbox.checked) {
+      var key = checkbox.dataset.key;
+      var input = document.querySelector('.prop-value[data-key="' + key + '"]');
+      var value = input.value || input.placeholder;
+      overrides.push(key + '=' + value);
+    }
+  });
+  
+  if (overrides.length === 0) {
+    toast('Select at least one property to override', 'err');
+    return;
+  }
+  
+  fetch(API + '/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(config) {
+      var content = config.content || '';
+      var envVars = '';
+      overrides.forEach(function(override) {
+        var parts = override.split('=');
+        var key = parts[0];
+        var value = parts.slice(1).join('=');
+        envVars += '      ' + key + ': "' + value + '"\n';
+      });
+      var envMatch = content.match(/environment:\n/);
+      if (envMatch) {
+        var envStart = content.indexOf(envMatch[0]) + envMatch[0].length;
+        content = content.slice(0, envStart) + envVars + content.slice(envStart);
+      }
+      return fetch(API + '/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content })
+      });
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        toast('Properties applied!', 'ok');
+      } else {
+        toast(data.message || 'Failed to apply properties', 'err');
+      }
+    })
+    .catch(function(e) { toast('Error applying properties', 'err'); });
+}
+
+// Load settings when tab is opened
+var settingsLoaded = false;
+var originalGoTab = window.goTab;
+
+window.goTab = function(name) {
+  // Call original goTab
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  var panel = document.getElementById('panel-' + name);
+  var btn = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+  if (btn) btn.classList.add('active');
+  
+  // Lazy-load tab data
+  if (!tabLoaded[name]) {
+    tabLoaded[name] = true;
+    if (name === 'files') loadFiles('/data');
+    if (name === 'mods') fetchMods();
+    if (name === 'config') fetchConfig();
+  }
+  
+  // Settings-specific logic
+  if (name === 'settings' && !settingsLoaded) {
+    settingsLoaded = true;
+    loadSettings();
+  }
+  if (name === 'config') {
+    fetchConfig();
+  }
+};
+
 </script>
 </body>
 </html>`

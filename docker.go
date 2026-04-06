@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
 
@@ -33,9 +35,42 @@ type ServerStatus struct {
 	MemLimitMB  float64   `json:"mem_limit_mb"`
 }
 
+// newDockerTransport creates an HTTP transport for the Docker Unix socket with a
+// short idle-connection timeout. This prevents stale pooled connections from
+// silently failing after a period of inactivity — the root cause of intermittent
+// "container not found" errors when operations succeed right after a restart but
+// fail a minute or two later.
+func newDockerTransport() *http.Client {
+	socketPath := "/var/run/docker.sock"
+	if h := os.Getenv("DOCKER_HOST"); strings.HasPrefix(h, "unix://") {
+		socketPath = strings.TrimPrefix(h, "unix://")
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 10 * time.Second,
+				}).DialContext(ctx, "unix", socketPath)
+			},
+			// Keep connections alive but expire them quickly so we never hand
+			// a stale socket back to a caller.
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 4,
+			IdleConnTimeout:     10 * time.Second,
+			DisableCompression:  true,
+		},
+	}
+}
+
 // NewDockerClient creates a new DockerClient connected to the local Docker daemon.
 func NewDockerClient(containerName string) (*DockerClient, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+		client.WithHTTPClient(newDockerTransport()),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to Docker daemon: %w", err)
 	}
@@ -47,42 +82,25 @@ func (dc *DockerClient) Close() {
 	dc.cli.Close()
 }
 
-// findContainer returns the container ID by name.
-func (dc *DockerClient) findContainer(ctx context.Context) (string, error) {
-	f := filters.NewArgs(filters.Arg("name", dc.containerName))
-	containers, err := dc.cli.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: f,
-	})
-	if err != nil {
-		return "", fmt.Errorf("listing containers: %w", err)
-	}
-	for _, c := range containers {
-		for _, name := range c.Names {
-			if name == "/"+dc.containerName || name == dc.containerName {
-				return c.ID, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("container %q not found", dc.containerName)
-}
-
-// GetStatus returns the current status of the Minecraft container.
+// GetStatus returns the current status of the container.
+// Uses ContainerInspect by name directly — reliable regardless of how the
+// container was started (panel, docker compose, docker run, etc.).
 func (dc *DockerClient) GetStatus(ctx context.Context) (*ServerStatus, error) {
-	id, err := dc.findContainer(ctx)
+	info, err := dc.cli.ContainerInspect(ctx, dc.containerName)
 	if err != nil {
 		return &ServerStatus{Running: false, Status: "not found"}, nil
 	}
 
-	info, err := dc.cli.ContainerInspect(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("inspecting container: %w", err)
+	id := info.ID
+	short := id
+	if len(id) >= 12 {
+		short = id[:12]
 	}
 
 	status := &ServerStatus{
 		Running:     info.State.Running,
 		Status:      info.State.Status,
-		ContainerID: id[:12],
+		ContainerID: short,
 		Image:       info.Config.Image,
 	}
 
@@ -108,47 +126,31 @@ func (dc *DockerClient) GetStatus(ctx context.Context) (*ServerStatus, error) {
 	return status, nil
 }
 
-// Start starts the Minecraft container.
+// Start starts the container.
 func (dc *DockerClient) Start(ctx context.Context) error {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return err
-	}
-	return dc.cli.ContainerStart(ctx, id, container.StartOptions{})
+	return dc.cli.ContainerStart(ctx, dc.containerName, container.StartOptions{})
 }
 
-// Stop gracefully stops the Minecraft container with a 30-second timeout.
+// Stop gracefully stops the container with a 30-second timeout.
 func (dc *DockerClient) Stop(ctx context.Context) error {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return err
-	}
 	timeout := 30
-	return dc.cli.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout})
+	return dc.cli.ContainerStop(ctx, dc.containerName, container.StopOptions{Timeout: &timeout})
 }
 
-// Restart restarts the Minecraft container.
+// Restart restarts the container.
 func (dc *DockerClient) Restart(ctx context.Context) error {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return err
-	}
 	timeout := 30
-	return dc.cli.ContainerRestart(ctx, id, container.StopOptions{Timeout: &timeout})
+	return dc.cli.ContainerRestart(ctx, dc.containerName, container.StopOptions{Timeout: &timeout})
 }
 
 // StreamLogs streams container logs to the provided writer.
 // Docker's multiplexed log format prefixes each frame with an 8-byte header.
 func (dc *DockerClient) StreamLogs(ctx context.Context, w io.Writer, tail string) error {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return err
-	}
 	if tail == "" {
 		tail = "100"
 	}
 
-	reader, err := dc.cli.ContainerLogs(ctx, id, container.LogsOptions{
+	reader, err := dc.cli.ContainerLogs(ctx, dc.containerName, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
@@ -186,14 +188,9 @@ func (dc *DockerClient) StreamLogs(ctx context.Context, w io.Writer, tail string
 	}
 }
 
-// SendCommand sends a command to the Minecraft server via rcon-cli and captures output
+// SendCommand sends a command to the Minecraft server via rcon-cli and captures output.
 func (dc *DockerClient) SendCommand(ctx context.Context, command string) (string, error) {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	exec, err := dc.cli.ContainerExecCreate(ctx, id, types.ExecConfig{
+	exec, err := dc.cli.ContainerExecCreate(ctx, dc.containerName, types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          []string{"rcon-cli", command},
@@ -211,23 +208,17 @@ func (dc *DockerClient) SendCommand(ctx context.Context, command string) (string
 	var output strings.Builder
 	buf := make([]byte, 4096)
 	for {
-		// Read 8-byte header
 		header := make([]byte, 8)
-		_, err := io.ReadFull(resp.Conn, header)
-		if err != nil {
+		if _, err := io.ReadFull(resp.Conn, header); err != nil {
 			break
 		}
-		
-		// Parse frame size from header
 		size := int(header[4])<<24 | int(header[5])<<16 | int(header[6])<<8 | int(header[7])
 		if size == 0 {
 			continue
 		}
-		
 		if size > len(buf) {
 			buf = make([]byte, size)
 		}
-		
 		n, err := io.ReadFull(resp.Conn, buf[:size])
 		if n > 0 {
 			output.Write(buf[:n])

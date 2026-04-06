@@ -19,39 +19,31 @@ type PlayerList struct {
 }
 
 // rconListRegex matches: "There are 2 of a max of 20 players online: Player1, Player2"
-// Also handles the zero-player variant: "There are 0 of a max of 20 players online:"
 var rconListRegex = regexp.MustCompile(`There are (\d+) of a max(?: of)? (\d+) players online:(.*)`)
 
 // GetPlayers runs `rcon-cli list` inside the container and parses the response.
+// Uses the container name directly — no findContainer needed.
 func (dc *DockerClient) GetPlayers(ctx context.Context) (*PlayerList, error) {
-	id, err := dc.findContainer(ctx)
-	if err != nil {
-		return &PlayerList{}, nil // container not found — return empty, not an error
-	}
-
-	// Create exec for rcon-cli list
-	exec, err := dc.cli.ContainerExecCreate(ctx, id, types.ExecConfig{
+	exec, err := dc.cli.ContainerExecCreate(ctx, dc.containerName, types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          []string{"rcon-cli", "list"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("creating exec: %w", err)
+		// Container not running or not found — return empty list silently.
+		return &PlayerList{Online: []string{}}, nil
 	}
 
-	// Attach to capture output
 	resp, err := dc.cli.ContainerExecAttach(ctx, exec.ID, types.ExecStartCheck{})
 	if err != nil {
 		return nil, fmt.Errorf("attaching exec: %w", err)
 	}
 	defer resp.Close()
 
-	// Read multiplexed Docker stream into a buffer
 	var buf bytes.Buffer
 	readDockerStream(resp.Reader, &buf)
 
 	output := strings.TrimSpace(buf.String())
-
 	return parsePlayerList(output), nil
 }
 
